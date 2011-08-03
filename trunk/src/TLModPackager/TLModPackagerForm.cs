@@ -17,7 +17,7 @@ namespace TLModPackager
     /// TODO: Check for existing readme.txt and grab information from it into controls (textboxes, ...)
     /// </summary>
     public partial class TLModPackagerForm : Form
-    {
+    {        
         public bool ErrorOccured;
         public string ErrorDescription;
 
@@ -33,9 +33,28 @@ namespace TLModPackager
         List<string> IgnoreFilesWithExtensions { get; set; }
         List<string> IgnoreFiles { get; set; }
 
+        List<string> IgnoreModFolders { get; set; }
+
+        string ReadMeFile { get; set; }
+        Dictionary<string, string> ReadMeDict { get; set; }
+
         Color OriginalBackColor;
 
         const string READ_ME = "readme.txt";
+        const string IMOD_NAME = "Mod Name";
+        const string IMOD_VERSION = "Version";
+        const string IMOD_AUTHOR = "Mod Author";
+        const string IMOD_EMAIL = "Email";
+        const string IMOD_WEBSITE = "Web site";
+        const string IMOD_RELEASEDATE = "Release date";
+        const string IMOD_CATEGORY = "Category";
+        const string IMOD_DESCRIPTION = "Description";
+        const string IMOD_DETAILS = "Details";
+        const string IMOD_LOCATION = "Location:";
+        const string IMOD_INSTAL_ISSUES = "Instalation & Compatibility issues";
+        const string IMOD_LICENSING = "Licensing";
+        const string IMOD_LONG_SEPARATOR = "===================================";
+        char[] IMOD_SHORT_SEPARATORS = null;
 
         public TLModPackagerForm()
         {
@@ -45,6 +64,8 @@ namespace TLModPackager
             
             ModFiles = new List<string>();
             SelectedModFiles = new List<string>();
+            ReadMeFile = string.Empty;
+
 
             IgnoreFilesWithExtensions = new List<string>();
             IgnoreFilesWithExtensions.Add(".adm");
@@ -55,10 +76,15 @@ namespace TLModPackager
             IgnoreFiles.Add("mods.dat");
             IgnoreFiles.Add("readme.txt");
 
+            IgnoreModFolders = new List<string>();
+            IgnoreModFolders.Add("HotSpot");
+
             OriginalBackColor = buttonModFolder.BackColor;
 
             panelManager.SelectedIndex = 0;
             buttonSelectMod.Enabled = false;
+
+            buttonReadMePrefill.Visible = false;
 
             comboBoxICategory.Items.Clear();
             comboBoxICategory.Items.Add("Class");
@@ -89,6 +115,9 @@ namespace TLModPackager
             comboBoxLicensing.Items.Add("Other (fill in below)");
             comboBoxLicensing.SelectedIndex = 0;
 
+            BuildEmptyReadMeDict();
+            IMOD_SHORT_SEPARATORS = new char[] { ':' };
+
             buttonDetectMods.BackColor = Color.LightPink;
 
             textBoxIInstallCompatibility.Text = @"Extract Contents of Archive to '%appdata%\runic games\torchlight\mods'";
@@ -103,11 +132,38 @@ namespace TLModPackager
             UpdateInfo();
         }
 
+        private void BuildEmptyReadMeDict()
+        {
+            ReadMeDict = new Dictionary<string, string>();
+            ReadMeDict.Add(IMOD_AUTHOR, string.Empty);
+            ReadMeDict.Add(IMOD_CATEGORY, string.Empty);
+            ReadMeDict.Add(IMOD_DESCRIPTION, string.Empty);
+            ReadMeDict.Add(IMOD_DETAILS, string.Empty);
+            ReadMeDict.Add(IMOD_EMAIL, string.Empty);
+            ReadMeDict.Add(IMOD_INSTAL_ISSUES, string.Empty);
+            ReadMeDict.Add(IMOD_LICENSING, string.Empty);
+            ReadMeDict.Add(IMOD_LOCATION, string.Empty);
+            ReadMeDict.Add(IMOD_NAME, string.Empty);
+            ReadMeDict.Add(IMOD_RELEASEDATE, string.Empty);
+            ReadMeDict.Add(IMOD_VERSION, string.Empty);
+            ReadMeDict.Add(IMOD_WEBSITE, string.Empty);
+        }
+
+        private void ResetControlsText()
+        {
+            BuildEmptyReadMeDict();
+            FillControlsFromReadMeDict();
+            comboBoxICategory.SelectedIndex = 0;
+            comboBoxLicensing.SelectedIndex = 0;
+            textBoxIVersion.Text = "1.0";
+            dateTimePickerIRelease.Value = DateTime.Now;
+        }
+
         private void buttonModFolder_Click(object sender, EventArgs e)
         {
             panelManager.SelectedIndex = 0;
             buttonSelectMod.Enabled = false;
-            
+                        
             UpdateInfo();
             progressBarArchive.Visible = false;
 
@@ -130,8 +186,7 @@ namespace TLModPackager
         private void buttonModInfo_Click(object sender, EventArgs e)
         {
             panelManager.SelectedIndex = 2;
-
-            textBoxIModName.Text = ModFolderName;
+                        
             UpdateInfo();
             progressBarArchive.Visible = false;
 
@@ -209,12 +264,14 @@ namespace TLModPackager
         }
 
         void UpdateInfo()
-        {
+        {            
             ModAuthor = textBoxIAuthor.Text;
+            ModFolderName = string.IsNullOrEmpty(textBoxIModName.Text) ? ModFolderName : textBoxIModName.Text;
             string author = string.IsNullOrEmpty(ModAuthor) ? string.Empty :  "by " + ModAuthor;
             string numFiles = SelectedModFiles.Count == 0 ? string.Empty : string.Format("({0} files)", SelectedModFiles.Count);
             string info = string.Format("{0} {1} {2}", ModFolderName, numFiles, author);
             labelModFolderName.Text = info;
+            textBoxIModName.Text = ModFolderName;
 
             // coloring
             buttonModFolder.BackColor = OriginalBackColor;
@@ -222,6 +279,16 @@ namespace TLModPackager
             buttonModInfo.BackColor = OriginalBackColor;
             buttonPackaging.BackColor = OriginalBackColor;
             buttonModDescription.BackColor = OriginalBackColor;
+
+            if (SelectedModFiles.Count == 0)
+            {
+                buttonFileSelect.BackColor = Color.LightSalmon;
+            }
+            if (string.IsNullOrEmpty(ModAuthor) || string.IsNullOrEmpty(ModFolderName))
+            {
+                buttonModInfo.BackColor = Color.LightSalmon;
+            }
+
             switch (panelManager.SelectedIndex)
             {
                 case 0:
@@ -239,7 +306,7 @@ namespace TLModPackager
                 case 4:
                     buttonModDescription.BackColor = Color.LightSteelBlue;
                     break;
-            }
+            }            
         }
 
         void PopulateModFoldersView(string theModsPath)
@@ -248,7 +315,18 @@ namespace TLModPackager
             listViewModFolders.Items.Clear();
             foreach (var fld in modFolders)
             {
-                listViewModFolders.Items.Add(Path.GetFileName(fld));
+                string nameOnly = Path.GetFileName(fld);
+                bool skip = false;
+                // cross check folder name against mod folders to ignore
+                foreach (var igMod in IgnoreModFolders)
+                {
+                    if (nameOnly.Equals(igMod))
+                    {
+                        skip = true;
+                        break;
+                    }
+                }
+                if (!skip) listViewModFolders.Items.Add(nameOnly);
             }
         }         
 
@@ -303,11 +381,12 @@ namespace TLModPackager
         {
             if (listViewModFolders.SelectedItems.Count > 0)
             {
+                buttonReadMePrefill.Visible = false;
                 buttonSelectMod.Enabled = true;
                 if (string.IsNullOrEmpty(ModFolderName))
                 {
                     buttonSelectMod.BackColor = Color.LightPink;
-                }
+                }                
             }
         }
 
@@ -325,7 +404,15 @@ namespace TLModPackager
                     SelectedModFiles.Clear();
                     treeViewModFiles.Nodes.Clear();
                 }
-                               
+
+                string readmePath = Path.Combine(ModFolderPath, READ_ME);
+                if (File.Exists(readmePath))
+                {
+                    buttonReadMePrefill.Visible = true;
+                }
+
+                ResetControlsText();
+               
                 UpdateInfo();
             }
         }
@@ -465,58 +552,59 @@ namespace TLModPackager
         {            
             string path = Path.Combine(thePath, READ_ME);
             using (TextWriter writer = File.CreateText(path)) // Use File.CreateText result
-            {
+            {                
                 writer.WriteLine(textBoxArchiveName.Text);
                 writer.WriteLine();
-                writer.WriteLine("Mod Name: {0}", textBoxIModName.Text);
-                writer.WriteLine("Version: {0}", textBoxIVersion.Text);
-                writer.WriteLine("Mod Author: {0} \t Email: {1} \t Web site: {2}",
-                    textBoxIAuthor.Text, textBoxIEmail.Text, textBoxIWebSite.Text);
-                
-                writer.WriteLine("Release date: {0}", dateTimePickerIRelease.Value.ToShortDateString());
+                writer.WriteLine("{0}: {1}",IMOD_NAME, textBoxIModName.Text);
+                writer.WriteLine("{0}: {1}", IMOD_VERSION, textBoxIVersion.Text);
+                writer.WriteLine("{0}: {1}", IMOD_AUTHOR, textBoxIAuthor.Text);
+                writer.WriteLine("{0}: {1}", IMOD_EMAIL, textBoxIEmail.Text);
+                writer.WriteLine("{0}: {1}", IMOD_WEBSITE, textBoxIWebSite.Text);
+
+                writer.WriteLine("{0}: {1}", IMOD_RELEASEDATE, dateTimePickerIRelease.Value.ToShortDateString());
                 if (!string.IsNullOrEmpty(comboBoxIDetails.Text))
                 {
-                    writer.WriteLine("Category: {0}/{1}", comboBoxICategory.Text, comboBoxIDetails.Text);
+                    writer.WriteLine("{0}: {1}/{2}", IMOD_CATEGORY, comboBoxICategory.Text, comboBoxIDetails.Text);
                 }
                 else
                 {
-                    writer.WriteLine("Category: {0}", comboBoxICategory.Text);
+                    writer.WriteLine("{0}: {1}", IMOD_CATEGORY, comboBoxICategory.Text);
                 }
                 writer.WriteLine();
                 writer.WriteLine();
-                writer.WriteLine("===========");
-                writer.WriteLine("Description");
-                writer.WriteLine("===========");
+                writer.WriteLine(IMOD_LONG_SEPARATOR);
+                writer.WriteLine("{0}:", IMOD_DESCRIPTION);
+                writer.WriteLine(IMOD_LONG_SEPARATOR);
                 writer.WriteLine(textBoxIDescription.Text);
 
                 if (!string.IsNullOrEmpty(textBoxIDetails.Text))
                 {
                     writer.WriteLine();
-                    writer.WriteLine("===========");
-                    writer.WriteLine("Details");
-                    writer.WriteLine("===========");
+                    writer.WriteLine(IMOD_LONG_SEPARATOR);
+                    writer.WriteLine("{0}:", IMOD_DETAILS);
+                    writer.WriteLine(IMOD_LONG_SEPARATOR);
                     writer.WriteLine(textBoxIDetails.Text);
                 }
 
                 if (!string.IsNullOrEmpty(textBoxILocation.Text))
                 {
                     writer.WriteLine();
-                    writer.WriteLine("===========");
-                    writer.WriteLine("Location");
-                    writer.WriteLine("===========");
+                    writer.WriteLine(IMOD_LONG_SEPARATOR);
+                    writer.WriteLine("{0}:", IMOD_LOCATION);
+                    writer.WriteLine(IMOD_LONG_SEPARATOR);
                     writer.WriteLine(textBoxILocation.Text);
                 }
 
                 writer.WriteLine();
-                writer.WriteLine("===========");
-                writer.WriteLine("Instalation");
-                writer.WriteLine("===========");
+                writer.WriteLine(IMOD_LONG_SEPARATOR);
+                writer.WriteLine("{0}:", IMOD_INSTAL_ISSUES);
+                writer.WriteLine(IMOD_LONG_SEPARATOR);
                 writer.WriteLine(textBoxIInstallCompatibility.Text);
 
                 writer.WriteLine();
-                writer.WriteLine("===========");
-                writer.WriteLine("Licensing");
-                writer.WriteLine("===========");
+                writer.WriteLine(IMOD_LONG_SEPARATOR);
+                writer.WriteLine("{0}:", IMOD_LICENSING);
+                writer.WriteLine(IMOD_LONG_SEPARATOR);
                 writer.WriteLine(comboBoxLicensing.Text);
                 writer.WriteLine(textBoxILicensing.Text);
             }
@@ -531,14 +619,20 @@ namespace TLModPackager
 
         private void buttonCreateArchive_Click(object sender, EventArgs e)
         {
+            if (textBoxArchiveName.Text.IndexOfAny(Path.GetInvalidFileNameChars()) != -1)
+            {
+                MessageBox.Show("Desired archive name is invalid");
+                return;
+            }
+
             progressBarArchive.Visible = true;
             buttonCreateArchive.Enabled = false;
             textBoxArchDestination.Enabled = false;
             textBoxArchiveName.Enabled = false;
 
             string readme = CreateReadMeFile(Path.Combine(ModsPath, ModFolderName));
-            AddReadMeToBeArchived();
-
+            ReadMeFile = Path.Combine(ModFolderName, READ_ME);
+          
             CreateArchive();
 
             buttonCreateArchive.Enabled = true;
@@ -555,26 +649,12 @@ namespace TLModPackager
                 notePad.Start();
             }
         }
-
-        void AddReadMeToBeArchived()
-        {
-            for (int i = SelectedModFiles.Count - 1; i >= 0; i--)
-            {
-                if (Path.GetFileName(SelectedModFiles[i]).Equals(READ_ME))
-                {
-                    SelectedModFiles.RemoveAt(i);
-                    break;
-                }
-            }
-
-            SelectedModFiles.Add(Path.Combine(ModFolderName, READ_ME));
-        }
-
+     
         void CreateArchive()
         {
             string desiredArchName = textBoxArchiveName.Text;
             string dest = textBoxArchDestination.Text;
-
+                        
             string archivePath = Path.Combine(dest, desiredArchName);
 
             try
@@ -596,37 +676,11 @@ namespace TLModPackager
 
                     foreach (string file in filenames)
                     {
-                        string filePath = Path.Combine(ModsPath, file);
-                        // Using GetFileName makes the result compatible with XP
-                        // as the resulting path is not absolute.                        
-                        //ZipEntry entry = new ZipEntry(Path.GetFileName(filePath));   
-                        ZipEntry entry = new ZipEntry(file);     
-
-                        // Setup the entry data as required.
-
-                        // Crc and size are handled by the library for seakable streams
-                        // so no need to do them here.
-
-                        // Could also use the last write time or similar for the file.
-                        entry.DateTime = DateTime.Now;
-                        s.PutNextEntry(entry);
-
-                        using (FileStream fs = File.OpenRead(filePath))
-                        {
-
-                            // Using a fixed size buffer here makes no noticeable difference for output
-                            // but keeps a lid on memory usage.
-                            int sourceBytes;
-                            do
-                            {
-                                sourceBytes = fs.Read(buffer, 0, buffer.Length);
-                                s.Write(buffer, 0, sourceBytes);
-                            } while (sourceBytes > 0);
-                        }
-
-                        progressBarArchive.Increment(1);
+                        CreateArchiveForFile(s, buffer, file);
                     }
-
+                    // pack also readme file
+                    CreateArchiveForFile(s, buffer, ReadMeFile);
+                    
                     // Finish/Close arent needed strictly as the using statement does this automatically
 
                     // Finish is important to ensure trailing information for a Zip file is appended.  Without this
@@ -647,10 +701,45 @@ namespace TLModPackager
 
         }
 
+        private void CreateArchiveForFile(ZipOutputStream s, byte[] buffer, string file)
+        {
+            string filePath = Path.Combine(ModsPath, file);
+            // Using GetFileName makes the result compatible with XP
+            // as the resulting path is not absolute.                        
+            //ZipEntry entry = new ZipEntry(Path.GetFileName(filePath));   
+            ZipEntry entry = new ZipEntry(file);
+
+            // Setup the entry data as required.
+
+            // Crc and size are handled by the library for seakable streams
+            // so no need to do them here.
+
+            // Could also use the last write time or similar for the file.
+            entry.DateTime = DateTime.Now;
+            s.PutNextEntry(entry);
+
+            using (FileStream fs = File.OpenRead(filePath))
+            {
+
+                // Using a fixed size buffer here makes no noticeable difference for output
+                // but keeps a lid on memory usage.
+                int sourceBytes;
+                do
+                {
+                    sourceBytes = fs.Read(buffer, 0, buffer.Length);
+                    s.Write(buffer, 0, sourceBytes);
+                } while (sourceBytes > 0);
+            }
+
+            progressBarArchive.Increment(1);
+        }
+
         private void textBoxIModName_TextChanged(object sender, EventArgs e)
         {
-            ModFolderName = textBoxIModName.Text;
+            //ModFolderName = textBoxIModName.Text;
             ArchiveNameChangeFlag = true;
+            if (textBoxIModName.Text.IndexOfAny(Path.GetInvalidFileNameChars()) != -1)
+                textBoxIModName.BackColor = Color.LightPink;
         }
 
         private void textBoxIVersion_TextChanged(object sender, EventArgs e)
@@ -665,6 +754,10 @@ namespace TLModPackager
                 textBoxIAuthor.BackColor = Color.LightPink;
             else
                 textBoxIAuthor.BackColor = OriginalBackColor;
+
+            if (textBoxIAuthor.Text.IndexOfAny(Path.GetInvalidFileNameChars()) != -1)
+                textBoxIAuthor.BackColor = Color.LightPink;
+
         }
 
         private void comboBoxIDetails_SelectedIndexChanged(object sender, EventArgs e)
@@ -689,5 +782,136 @@ namespace TLModPackager
             }
         }
 
+        private void buttonReadMePrefill_Click(object sender, EventArgs e)
+        {
+            string readMe = Path.Combine(ModFolderPath, READ_ME);
+            if (!File.Exists(readMe)) return;
+            
+            StreamReader sr = File.OpenText(readMe);
+            List<string> readMeFile = new List<string>();
+            string input = null;
+            while ((input = sr.ReadLine()) != null)
+            {
+                readMeFile.Add(input);                
+            }
+
+            sr.Close();
+
+            try
+            {
+                ParseReadMe(readMeFile);
+                FillControlsFromReadMeDict();
+            }
+            catch (Exception)
+            {
+                // just ignore - this was just a try to prefill controls from .txt file
+            }
+            UpdateInfo();
+        }
+
+        
+
+        private void FillControlsFromReadMeDict()
+        {
+            textBoxIAuthor.Text = ReadMeDict[IMOD_AUTHOR];
+            textBoxIEmail.Text = ReadMeDict[IMOD_EMAIL];
+            textBoxILocation.Text = ReadMeDict[IMOD_LOCATION];
+            textBoxIModName.Text = ReadMeDict[IMOD_NAME];
+            textBoxIVersion.Text = ReadMeDict[IMOD_VERSION];
+            textBoxIWebSite.Text = ReadMeDict[IMOD_WEBSITE];
+            textBoxIDescription.Text = ReadMeDict[IMOD_DESCRIPTION];
+            textBoxIInstallCompatibility.Text = ReadMeDict[IMOD_INSTAL_ISSUES];
+
+            string cat = ReadMeDict[IMOD_CATEGORY];
+            if (!string.IsNullOrEmpty(cat))
+            {
+                if (cat.Contains('/'))
+                {
+                    var str = cat.Split('/');
+                    if (comboBoxICategory.Items.Contains(str[0]))
+                    {
+                        comboBoxICategory.SelectedItem = str[0];
+                    }
+                    if (comboBoxIDetails.Items.Contains(str[1]))
+                    {
+                        comboBoxIDetails.SelectedItem = str[1];
+                    }
+                }
+                else
+                {
+                    if (comboBoxICategory.Items.Contains(cat))
+                    {
+                        comboBoxICategory.SelectedItem = cat;
+                    }
+                }
+            }
+
+            string lic = ReadMeDict[IMOD_LICENSING];
+            if (!string.IsNullOrEmpty(lic))
+            {
+                StringReader sr = new StringReader(lic);
+                var l1 = sr.ReadLine();
+                if (!string.IsNullOrEmpty(l1))
+                {
+                    if (comboBoxLicensing.Items.Contains(l1))
+                    {
+                        comboBoxLicensing.SelectedItem = l1;
+                    }
+                }
+            }
+
+            string dt = ReadMeDict[IMOD_RELEASEDATE];
+            if (!string.IsNullOrEmpty(dt))
+            {
+                DateTime ddt = new DateTime();
+                bool valid = DateTime.TryParse(dt, out ddt);
+                if (valid) dateTimePickerIRelease.Value = ddt;
+            }
+        }
+
+        private void ParseReadMe(List<string> theFile)
+        {            
+            int line = 0;
+
+            do
+            {
+                if (theFile[line].StartsWith(IMOD_LONG_SEPARATOR.Substring(0, 2)))
+                {
+                    line++;
+                    string[] sp = theFile[line].Split(IMOD_SHORT_SEPARATORS, 2);                    
+                    if (sp.Length > 0 && ReadMeDict.ContainsKey(sp[0]))
+                    {
+                        string key = sp[0];
+                        StringBuilder vl = new StringBuilder();
+                        line++; line++;
+
+                        while (line < theFile.Count && 
+                            !theFile[line].StartsWith(IMOD_LONG_SEPARATOR.Substring(0, 2)))
+                        {
+                            vl.AppendLine(theFile[line]);
+                            line++;
+                        }
+                        line--;
+                        ReadMeDict[key] = vl.ToString();
+                    }
+                }
+                else
+                {
+                    string[] sp = theFile[line].Split(IMOD_SHORT_SEPARATORS, 2);
+                    if (sp.Length > 1 && ReadMeDict.ContainsKey(sp[0]))
+                    {
+                        ReadMeDict[sp[0]] = sp[1].Trim();
+                    }
+                }
+                line++;
+            }
+            while (line < theFile.Count);
+        }
+
+        private void buttonResetControlTexts_Click(object sender, EventArgs e)
+        {
+            ResetControlsText();
+            UpdateInfo();
+        }        
     }
 }
